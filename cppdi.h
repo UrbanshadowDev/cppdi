@@ -25,6 +25,7 @@
  *   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE      *
  *   SOFTWARE.                                                                          *
 \****************************************************************************************/
+#pragma once
 #include <typeinfo>
 #ifndef interface
 // Portable syntax sugar definition for interface
@@ -44,7 +45,7 @@ namespace di {
 
     class DiContainer final {
     public:
-        DiContainer(){ closed = false; }
+        DiContainer(){ sealed = false; }
         virtual ~DiContainer(){
             for(int i = numBindings-1; i > 0; i--) {
                 delete bindings[i];
@@ -52,7 +53,7 @@ namespace di {
             delete[] bindings;
         }
         template<typename I, class T, class... D> void Bind(Instantiation mode = Instantiation::singleton) {
-            if(closed) {
+            if(sealed) {
                 // Instance sealed
                 return;
             }
@@ -73,18 +74,22 @@ namespace di {
             }
             AddBind(bind);
         }
-        template<typename I> I* Get() {
-            Binding* bind = Resolve<I>();
+        template<typename T> T* Get() {
+            Binding* bind = Resolve<T>();
             if(bind == nullptr) {
                 // Type/Interface not binded
                 return nullptr;
             }
-            return (I*)bind->Build();
+            return (T*)bind->Build();
         }
-        void Close() {
-            closed = true;
+        void Seal() {
+            sealed = true;
         }
     private:
+        Binding** bindings;
+        unsigned int numBindings;
+        bool sealed;
+        
         template<typename T> Binding* Resolve() {
             for(unsigned int i = 0; i < numBindings; i++) {
                 Binding* current = bindings[i];
@@ -94,6 +99,7 @@ namespace di {
             }
             return nullptr;
         };
+        
         void AddBind(Binding* b){
             Binding** newBinds = new Binding*[numBindings+1];
             if(bindings != nullptr) {
@@ -107,40 +113,37 @@ namespace di {
             newBinds = nullptr;
             numBindings++;
         }
-        Binding** bindings;
-        unsigned int numBindings;
-        bool closed;
-    };
 
-    template <typename I, class T, class... D> class CtorBind : public Binding {
-    public:
-        CtorBind(DiContainer* cont, Instantiation imode){
-            mode = imode;
-            container = cont;
-        }
-        virtual ~CtorBind(){
-            delete instance;
-            container = nullptr;
-        }
-        const char* GetInterfaceName() override { return typeid(I).name(); }
-        const char* GetTypeName() override { return typeid(T).name(); }
-        void* Build() override {
-            if(mode == Instantiation::singleton && instance != nullptr) {
-                // If singleton and the instance exists, return
-                return instance;
+        template <typename I, class T, class... D> class CtorBind : public Binding {
+        public:
+            CtorBind(DiContainer* cont, Instantiation imode){
+                mode = imode;
+                container = cont;
             }
-
-            T* obj = new T(container->Get<D>()...);
-
-            if(mode == Instantiation::singleton) {
-                instance = obj;
+            virtual ~CtorBind(){
+                delete instance;
+                container = nullptr;
             }
-            
-            return obj;
-        }
-    private:
-        Instantiation mode;
-        T* instance;
-        DiContainer* container;
+            const char* GetInterfaceName() override { return typeid(I).name(); }
+            const char* GetTypeName() override { return typeid(T).name(); }
+            void* Build() override {
+                if(mode == Instantiation::singleton && instance != nullptr) {
+                    // If singleton and the instance exists, return
+                    return instance;
+                }
+
+                    T* obj = new T(container->Get<D>()...);
+
+                if(mode == Instantiation::singleton) {
+                    instance = obj;
+                }
+                
+                return obj;
+            }
+        private:
+            Instantiation mode;
+            T* instance;
+            DiContainer* container;
+        };
     };
-}
+};
