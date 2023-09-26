@@ -46,7 +46,10 @@ namespace di {
     public:
         DiContainer(){ closed = false; }
         virtual ~DiContainer(){
-            //TODO: Clean bindings
+            for(int i = numBindings-1; i > 0; i--) {
+                delete bindings[i];
+            }
+            delete[] bindings;
         }
         template<typename I, class T, class... D> void Bind(Instantiation mode = Instantiation::singleton) {
             if(closed) {
@@ -115,7 +118,10 @@ namespace di {
             mode = imode;
             container = cont;
         }
-        virtual ~CtorBind(){}
+        virtual ~CtorBind(){
+            delete instance;
+            container = nullptr;
+        }
         const char* GetInterfaceName() override { return typeid(I).name(); }
         const char* GetTypeName() override { return typeid(T).name(); }
         void* Build() override {
@@ -135,7 +141,6 @@ namespace di {
     private:
         Instantiation mode;
         T* instance;
-
         DiContainer* container;
     };
 }
