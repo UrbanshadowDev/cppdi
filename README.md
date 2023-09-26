@@ -107,7 +107,7 @@ The `DiContainer::Get` function is also be used by the developer to request new 
 If the `CtorBind::Build` function succeeded and the bind itself was configured as a singleton, the first built instance of the bind will be preserved until the container instance is destroyed. Every call to `DiContainer::Get` will retrieve the same reference. If the bind was configured as factory, a new reference will be created for each call to `DiContainer::Get` and no instances will be preserved. Factory configured binds will be no longer tracked by the container and rely on proper destruction by the user.
 
 ### Sealing
-Once a container has been configured, a developer may choose to seal it. What this means is that specific instance will return silently for each call to `DiContainer::Bind` after the Sealing. This works for heavy factory based scenarios where several sealed instances of `DiContainer` configured in different ways may be moved around or even injected into target types. Be aware `DiContainer` cannot be mocked.
+Once a container has been configured, a developer may choose to seal it by calling `DiContainer::Seal`. What this means is that specific instance of `DiContainer` will return silently for each call to `DiContainer::Bind` after the Sealing. A sealed container cannot be unsealed. This works for heavy factory based scenarios where several sealed instances of `DiContainer` configured in different ways may be moved around or even injected into target types. Be aware `DiContainer` cannot be mocked.
 
 ## Contributing
 Is something missing? Something can be improved without going against the project goals?
