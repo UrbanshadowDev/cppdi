@@ -160,4 +160,4 @@ namespace di {
             DiContainer* container;
         };
     };
-};
+}
