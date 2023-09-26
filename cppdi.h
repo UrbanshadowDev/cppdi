@@ -50,7 +50,7 @@ namespace di {
             //TODO: Clean bindings
         }
         template<typename I, class T, class... D> void Bind(Instantiation mode = Instantiation::singleton) {
-            if(closed) {
+            if(sealed) {
                 // Instance sealed
                 return;
             }
@@ -71,13 +71,13 @@ namespace di {
             }
             AddBind(bind);
         }
-        template<typename I> I* Get() {
-            Binding* bind = Resolve<I>();
+        template<typename T> T* Get() {
+            Binding* bind = Resolve<T>();
             if(bind == nullptr) {
                 // Type/Interface not binded
                 return nullptr;
             }
-            return (I*)bind->Build();
+            return (T*)bind->Build();
         }
         void Seal() {
             sealed = true;

@@ -10,9 +10,11 @@ CPP-DI is a lightweight dependency injection header for C++
 - Is not global
 - Can be instantiated, sealed and moved around
 
+## Installation
+Just copy the `cppdi.h` in your include folder.
 ## How to use
-
-### Basic Usage
+Include the header in the file you want to use it. Inside the `di` namespace you will find the class `DiContainer`. Interact with this class to configure and retrieve your own classes.
+### Example scenario
 Considerations:
 - We have a class A with a base class BaseA: `class A : public BaseA`
 - We have a class B with a base class BaseB: `class B : public BaseB`
@@ -65,6 +67,12 @@ In this case ex1 and ex2 will be different. Also the instance of A generated and
 
 The container will not track factory configured instances. In the example scenario, the container will expect class C (singleton) to cleanup for A, B factory allocated. When the container is destroyed it will correctly call C and every singleton configured instance in the reverse order they were configured but will ignore factory configured bindings.  
 
+## Documentation
+### di::DiContainer
+- `void Bind<I, T, D...>(di::Instantiation)` This call will bind type T to the base class I using a constructor with types `D...`. The types specified in `D` can be base classes or final classes. Any type will be correctly resolved if it was binded previously. `D` can be omitted when the constructors have no parameters. `Bind` needs the inversion of control to be respected and assumes all constructor parameters to be pointers. If a type was already binded it will not overwrite the binding.
+- `T* Get<T>()` This call will get a pointer to an instance of type T from the configured binds. It will resolve base classes to binded types, even if the return is casted down to the base class again. If a type is missing will return (or inject) nullptr instead. 
+- `void Seal()` This call will seal the container. Any call to `Bind` after sealing will take no effect and will return silently. A container cannot be unsealed.
+
 ## How it works
 / ! \ Warning, dense write-up incoming / ! \
 
@@ -105,9 +113,6 @@ Remember any D is still a type, so the `DiContainer::Get` function should be tem
 The `DiContainer::Get` function is also be used by the developer to request new types to the container.
 
 If the `CtorBind::Build` function succeeded and the bind itself was configured as a singleton, the first built instance of the bind will be preserved until the container instance is destroyed. Every call to `DiContainer::Get` will retrieve the same reference. If the bind was configured as factory, a new reference will be created for each call to `DiContainer::Get` and no instances will be preserved. Factory configured binds will be no longer tracked by the container and rely on proper destruction by the user.
-
-### Sealing
-Once a container has been configured, a developer may choose to seal it by calling `DiContainer::Seal`. What this means is that specific instance of `DiContainer` will return silently for each call to `DiContainer::Bind` after the Sealing. A sealed container cannot be unsealed. This works for heavy factory based scenarios where several sealed instances of `DiContainer` configured in different ways may be moved around or even injected into target types. Be aware `DiContainer` cannot be mocked.
 
 ## Contributing
 Is something missing? Something can be improved without going against the project goals?
