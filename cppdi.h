@@ -45,7 +45,9 @@ namespace di {
     class DiContainer final {
     public:
         DiContainer(){ closed = false; }
-        virtual ~DiContainer(){}
+        virtual ~DiContainer(){
+            //TODO: Clean bindings
+        }
         template<typename I, class T, class... D> void Bind(Instantiation mode = Instantiation::singleton) {
             if(closed) {
                 // Instance sealed
