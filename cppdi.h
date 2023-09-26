@@ -25,6 +25,7 @@
  *   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE      *
  *   SOFTWARE.                                                                          *
 \****************************************************************************************/
+#pragma once
 #include <typeinfo>
 #ifndef interface
 // Portable syntax sugar definition for interface
@@ -44,7 +45,7 @@ namespace di {
 
     class DiContainer final {
     public:
-        DiContainer(){ closed = false; }
+        DiContainer(){ sealed = false; }
         virtual ~DiContainer(){
             //TODO: Clean bindings
         }
@@ -78,10 +79,14 @@ namespace di {
             }
             return (I*)bind->Build();
         }
-        void Close() {
-            closed = true;
+        void Seal() {
+            sealed = true;
         }
     private:
+        Binding** bindings;
+        unsigned int numBindings;
+        bool sealed;
+        
         template<typename T> Binding* Resolve() {
             for(unsigned int i = 0; i < numBindings; i++) {
                 Binding* current = bindings[i];
@@ -91,6 +96,7 @@ namespace di {
             }
             return nullptr;
         };
+        
         void AddBind(Binding* b){
             Binding** newBinds = new Binding*[numBindings+1];
             if(bindings != nullptr) {
@@ -104,38 +110,41 @@ namespace di {
             newBinds = nullptr;
             numBindings++;
         }
-        Binding** bindings;
-        unsigned int numBindings;
-        bool closed;
-    };
 
-    template <typename I, class T, class... D> class CtorBind : public Binding {
-    public:
-        CtorBind(DiContainer* cont, Instantiation imode){
-            mode = imode;
-            container = cont;
-        }
-        virtual ~CtorBind(){}
-        const char* GetInterfaceName() override { return typeid(I).name(); }
-        const char* GetTypeName() override { return typeid(T).name(); }
-        void* Build() override {
-            if(mode == Instantiation::singleton && instance != nullptr) {
-                // If singleton and the instance exists, return
-                return instance;
-            }
-
-            T* obj = new T(container->Get<D>()...);
-
-            if(mode == Instantiation::singleton) {
-                instance = obj;
+        template <typename I, class T, class... D> class CtorBind : public Binding {
+        public:
+            CtorBind(DiContainer* cont, Instantiation imode){
+                mode = imode;
+                container = cont;
             }
             
-            return obj;
-        }
-    private:
-        Instantiation mode;
-        T* instance;
+            virtual ~CtorBind(){
+                delete instance;
+                container = nullptr;
+            }
+            
+            const char* GetInterfaceName() override { return typeid(I).name(); }
+            
+            const char* GetTypeName() override { return typeid(T).name(); }
+            
+            void* Build() override {
+                if(mode == Instantiation::singleton && instance != nullptr) {
+                    // If singleton and the instance exists, return
+                    return instance;
+                }
 
-        DiContainer* container;
+                T* obj = new T(container->Get<D>()...);
+
+                if(mode == Instantiation::singleton) {
+                    instance = obj;
+                }
+                
+                return obj;
+            }
+        private:
+            Instantiation mode;
+            T* instance;
+            DiContainer* container;
+        };
     };
 }
