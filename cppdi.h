@@ -45,35 +45,44 @@ namespace di {
 
     class DiContainer final {
     public:
-        DiContainer(){ sealed = false; }
+        DiContainer(){ 
+            sealed = false; 
+        }
+        
         virtual ~DiContainer(){
             for(int i = numBindings-1; i > 0; i--) {
                 delete bindings[i];
             }
             delete[] bindings;
         }
+        
         template<typename I, class T, class... D> void Bind(Instantiation mode = Instantiation::singleton) {
             if(sealed) {
                 // Instance sealed
                 return;
             }
+            
             Binding* bind = Resolve<I>();
             if(bind != nullptr) {
                 // Already binded interface
                 return;
             }
+            
             bind = Resolve<T>();
             if(bind != nullptr) {
                 // Already binded type
                 return;
             }
+            
             bind = new CtorBind<I,T,D...>(this, mode);
             if(mode == Instantiation::singleton) {
                 // Instantiaton mode is singleton, build right now
                 bind->Build();
             }
+            
             AddBind(bind);
         }
+        
         template<typename T> T* Get() {
             Binding* bind = Resolve<T>();
             if(bind == nullptr) {
@@ -82,6 +91,7 @@ namespace di {
             }
             return (T*)bind->Build();
         }
+        
         void Seal() {
             sealed = true;
         }
@@ -120,19 +130,23 @@ namespace di {
                 mode = imode;
                 container = cont;
             }
+            
             virtual ~CtorBind(){
                 delete instance;
                 container = nullptr;
             }
+            
             const char* GetInterfaceName() override { return typeid(I).name(); }
+            
             const char* GetTypeName() override { return typeid(T).name(); }
+            
             void* Build() override {
                 if(mode == Instantiation::singleton && instance != nullptr) {
                     // If singleton and the instance exists, return
                     return instance;
                 }
 
-                    T* obj = new T(container->Get<D>()...);
+                T* obj = new T(container->Get<D>()...);
 
                 if(mode == Instantiation::singleton) {
                     instance = obj;
