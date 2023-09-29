@@ -27,137 +27,153 @@
 \****************************************************************************************/
 #pragma once
 #include <typeinfo>
-#ifndef interface
-// Portable syntax sugar definition for interface
-#define interface struct
-#endif
-namespace di {
-    enum class Instantiation{ singleton, factory };
 
-    interface Binding {
-        virtual ~Binding(){}
-        virtual const char* GetInterfaceName() = 0;
-        virtual const char* GetTypeName() = 0;
-        virtual void* Build() = 0;
-    };
+namespace DI {
 
-    template <typename I, class T, class... D> class CtorBind;
+    enum class Instantiation{ singleton, factory, provided };
 
-    class DiContainer final {
+    class Container final {
+    private:
+        struct Binding {
+            virtual ~Binding(){}
+            virtual const char* GetTypeName() = 0;
+            virtual void* Build() = 0;
+        };
+
+        struct TrackedInstance {
+            virtual ~TrackedInstance(){}
+            virtual const char* GetTypeName() = 0;
+            virtual Instantiation GetInstantiation() = 0;
+            virtual void* Get() = 0;
+        };
+
+        template <class T, class... D> class Ctor : public Binding {
+            public:
+                Ctor(Container* cont) : container(cont){}
+                virtual ~Ctor(){ container = nullptr; }
+                
+                const char* GetTypeName() override { return typeid(T).name(); }
+
+                void* Build() override { return new T(container->Get<D>()...); }
+            private:
+                Container* container;
+        };
+
+        template <class T> class TypeInstance : public TrackedInstance {
+            public:
+                TypeInstance(T* obj, DI::Instantiation ins) : instance(obj), mode(ins){}
+                virtual ~TypeInstance(){  delete instance; }
+                
+                const char* GetTypeName() override { return typeid(T).name(); }
+
+                Instantiation GetInstantiation() override { return mode; }
+
+                void* Get() override { return instance; }
+            private:
+                T* instance;
+                Instantiation mode;
+        };
+
+        Binding** bindings;
+        unsigned int numBindings;
+        TrackedInstance** instances;
+        unsigned int numInstances;
+        bool sealed;
+
     public:
-        DiContainer(){ 
-            sealed = false; 
-        }
+        Container() : sealed(false), numBindings(0), bindings(nullptr), numInstances(0), instances(0){}
         
-        virtual ~DiContainer(){
-            for(int i = numBindings-1; i > 0; i--) {
+        virtual ~Container(){
+            for(int i = numBindings-1; i >= 0; i--) {
                 delete bindings[i];
             }
             delete[] bindings;
+            for(int i = numInstances-1; i >= 0; i--) {
+                if(instances[i]->GetInstantiation() != Instantiation::provided) {
+                    delete instances[i];
+                }
+                instances[i] = nullptr;
+            }
+            delete[] instances;
         }
-        
-        template<typename I, class T, class... D> void Bind(Instantiation mode = Instantiation::singleton) {
-            if(sealed) {
-                // Instance sealed
-                return;
-            }
-            
-            Binding* bind = Resolve<I>();
-            if(bind != nullptr) {
-                // Already binded interface
-                return;
-            }
-            
-            bind = Resolve<T>();
-            if(bind != nullptr) {
-                // Already binded type
-                return;
-            }
-            
-            bind = new CtorBind<I,T,D...>(this, mode);
-            if(mode == Instantiation::singleton) {
-                // Instantiaton mode is singleton, build right now
-                bind->Build();
-            }
-            
-            AddBind(bind);
-        }
-        
-        template<typename T> T* Get() {
-            Binding* bind = Resolve<T>();
-            if(bind == nullptr) {
-                // Type/Interface not binded
-                return nullptr;
-            }
-            return (T*)bind->Build();
-        }
-        
+
         void Seal() {
             sealed = true;
         }
-    private:
-        Binding** bindings;
-        unsigned int numBindings;
-        bool sealed;
         
-        template<typename T> Binding* Resolve() {
-            for(unsigned int i = 0; i < numBindings; i++) {
-                Binding* current = bindings[i];
-                if(current->GetInterfaceName() == typeid(T).name() || current->GetTypeName() == typeid(T).name()) {
-                    return current;
+        template<class T, class... D> void Bind(Instantiation mode = Instantiation::singleton, T* instance = nullptr) {
+            if(sealed) { // If instance sealed, return
+                return;
+            }
+            
+            Binding* bind = Find<Binding, T>(bindings, numBindings);
+            if(bind != nullptr) { // If already binded type, return
+                return;
+            }
+            
+            bind = new Ctor<T,D...>(this);
+            AddBind(bind);
+
+            if(mode == Instantiation::singleton) { // If instantiation mode is singleton, build and add instance
+                AddInstance(new TypeInstance<T>((T*)bind->Build(), DI::Instantiation::singleton));
+            }
+
+            if(mode == Instantiation::provided) { // If instantiation mode is provided, add instance
+                AddInstance(new TypeInstance<T>(instance, DI::Instantiation::provided));
+            }
+        }
+        
+        template<typename T> T* Get() {
+            TrackedInstance* instance = Find<TrackedInstance, T>(instances, numInstances);
+            if(instance != nullptr) { // If instance found, return it unless its factory based
+                if(instance->GetInstantiation() != Instantiation::factory) {
+                    return (T*)instance->Get();
+                }
+            }
+
+            Binding* bind = Find<Binding, T>(bindings, numBindings);
+            if(bind == nullptr) { // If type not binded, return nullptr
+                return nullptr;
+            }
+
+            T* obj = (T*)bind->Build();
+
+            AddInstance(new TypeInstance<T>(obj, DI::Instantiation::factory));
+
+            return obj;
+        }
+    private:
+        template <class E, class T> E* Find(E** arr, unsigned int num) {
+            for(unsigned int i = 0; i < num; i++) {
+                if(arr[i]->GetTypeName() == typeid(T).name()) {
+                    return arr[i];
                 }
             }
             return nullptr;
-        };
+        }
         
-        void AddBind(Binding* b){
-            Binding** newBinds = new Binding*[numBindings+1];
-            if(bindings != nullptr) {
-                for(unsigned int i = 0; i < numBindings; i++) {
-                    newBinds[i] = bindings[i];
+        template <class T> void ExpandArray(T*** arr, unsigned int size) {
+            T** newArr = new T*[size];
+            if(*arr != nullptr) {
+                for(unsigned int i = 0; i < size; i++) {
+                    newArr[i] = (*arr)[i];
                 }
-                delete[] bindings;
+                delete[] *arr;
             }
-            newBinds[numBindings] = b;
-            bindings = newBinds;
-            newBinds = nullptr;
+            *arr = newArr;
+            newArr = nullptr;
+        }
+
+        void AddBind(Binding* b){
+            ExpandArray(&bindings, numBindings+1);
+            bindings[numBindings] = b;
             numBindings++;
         }
 
-        template <typename I, class T, class... D> class CtorBind : public Binding {
-        public:
-            CtorBind(DiContainer* cont, Instantiation imode){
-                mode = imode;
-                container = cont;
-            }
-            
-            virtual ~CtorBind(){
-                delete instance;
-                container = nullptr;
-            }
-            
-            const char* GetInterfaceName() override { return typeid(I).name(); }
-            
-            const char* GetTypeName() override { return typeid(T).name(); }
-            
-            void* Build() override {
-                if(mode == Instantiation::singleton && instance != nullptr) {
-                    // If singleton and the instance exists, return
-                    return instance;
-                }
-
-                T* obj = new T(container->Get<D>()...);
-
-                if(mode == Instantiation::singleton) {
-                    instance = obj;
-                }
-                
-                return obj;
-            }
-        private:
-            Instantiation mode;
-            T* instance;
-            DiContainer* container;
-        };
+        void AddInstance(TrackedInstance* tr) {
+            ExpandArray(&instances, numInstances+1);
+            instances[numInstances] = tr;
+            numInstances++;
+        }
     };
 }
